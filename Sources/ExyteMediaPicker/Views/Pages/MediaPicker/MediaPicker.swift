@@ -6,7 +6,9 @@ import SwiftUI
 import Combine
 
 public struct MediaPicker<AlbumSelectionContent: View, CameraSelectionContent: View>: View {
-
+    
+    // MARK: - Typealiases
+    
     /// To provide custom buttons layout for photos grid view use actions and views provided by this closure:
     /// - standard header with photos/albums switcher
     /// - selection view you can embed in your view
@@ -21,7 +23,32 @@ public struct MediaPicker<AlbumSelectionContent: View, CameraSelectionContent: V
 
     public typealias FilterClosure = (Media) async -> Media?
     public typealias MassFilterClosure = ([Media]) async -> [Media]
+    public typealias MediaSelectionClosure = ([Media]) -> Void
 
+    // MARK: - Structs
+    
+    public struct DefaultHeaderViewModel {
+        public var closeButtonTitle: String?
+        public var doneButtonTitle: String?
+        public var photosPickerTitle: String?
+        public var albumsPickerTitle: String?
+        public var doneButtonHandler: MediaSelectionClosure?
+        
+        public init(
+            closeButtonTitle: String? = nil,
+            doneButtonTitle: String? = nil,
+            photosPickerTitle: String? = nil,
+            albumsPickerTitle: String? = nil,
+            doneButtonHandler: MediaSelectionClosure? = nil
+        ) {
+            self.closeButtonTitle = closeButtonTitle
+            self.doneButtonTitle = doneButtonTitle
+            self.photosPickerTitle = photosPickerTitle
+            self.albumsPickerTitle = albumsPickerTitle
+            self.doneButtonHandler = doneButtonHandler
+        }
+    }
+    
     // MARK: - Parameters
 
     @Binding private var isPresented: Bool
@@ -44,6 +71,7 @@ public struct MediaPicker<AlbumSelectionContent: View, CameraSelectionContent: V
     private var filterClosure: FilterClosure?
     private var massFilterClosure: MassFilterClosure?
     private var selectionParamsHolder = SelectionParamsHolder()
+    private var defaultHeaderViewModel: DefaultHeaderViewModel?
 
     // MARK: - Inner values
 
@@ -122,6 +150,11 @@ public struct MediaPicker<AlbumSelectionContent: View, CameraSelectionContent: V
         .onAppear {
             if let mode = pickerMode?.wrappedValue {
                 viewModel.setPickerMode(mode)
+            }
+        }
+        .onChange(of: isPresented) { newValue in
+            if let doneButtonHandler = defaultHeaderViewModel?.doneButtonHandler {
+                doneButtonHandler(selectionService.mapToMedia() + cameraSelectionService.mapToMedia())
             }
         }
     }
@@ -217,7 +250,7 @@ public struct MediaPicker<AlbumSelectionContent: View, CameraSelectionContent: V
 
     var defaultHeaderView: some View {
         HStack {
-            Button("Cancel") {
+            Button(defaultHeaderViewModel?.closeButtonTitle ?? "Cancel") {
                 selectionService.removeAll()
                 cameraSelectionService.removeAll()
                 isPresented = false
@@ -233,9 +266,9 @@ public struct MediaPicker<AlbumSelectionContent: View, CameraSelectionContent: V
                         }
                     )
             ) {
-                Text("Photos")
+                Text(defaultHeaderViewModel?.photosPickerTitle ?? "Photos")
                     .tag(0)
-                Text("Albums")
+                Text(defaultHeaderViewModel?.albumsPickerTitle ?? "Albums")
                     .tag(1)
             }
             .pickerStyle(SegmentedPickerStyle())
@@ -243,8 +276,8 @@ public struct MediaPicker<AlbumSelectionContent: View, CameraSelectionContent: V
 
             Spacer()
 
-            Button("Done") {
-                if selectionService.selected.isEmpty, let current = currentFullscreenMedia {
+            Button(defaultHeaderViewModel?.doneButtonTitle ?? "Done") {
+                if defaultHeaderViewModel?.doneButtonHandler == nil, selectionService.selected.isEmpty, let current = currentFullscreenMedia {
                     onChange([current])
                 }
                 isPresented = false
@@ -355,11 +388,13 @@ public extension MediaPicker {
 public extension MediaPicker where AlbumSelectionContent == EmptyView, CameraSelectionContent == EmptyView {
 
     init(isPresented: Binding<Bool>,
-         onChange: @escaping MediaPickerCompletionClosure) {
+         onChange: @escaping MediaPickerCompletionClosure,
+         defaultHeaderViewModel: DefaultHeaderViewModel? = nil) {
 
         self._isPresented = isPresented
         self._albums = .constant([])
         self._currentFullscreenMediaBinding = .constant(nil)
+        self.defaultHeaderViewModel = defaultHeaderViewModel
 
         self.onChange = onChange
     }
@@ -369,11 +404,13 @@ public extension MediaPicker where AlbumSelectionContent == EmptyView {
 
     init(isPresented: Binding<Bool>,
          onChange: @escaping MediaPickerCompletionClosure,
+         defaultHeaderViewModel: DefaultHeaderViewModel? = nil,
          cameraSelectionBuilder: @escaping CameraSelectionClosure) {
 
         self._isPresented = isPresented
         self._albums = .constant([])
         self._currentFullscreenMediaBinding = .constant(nil)
+        self.defaultHeaderViewModel = defaultHeaderViewModel
 
         self.onChange = onChange
         self.cameraSelectionBuilder = cameraSelectionBuilder
